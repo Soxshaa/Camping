@@ -4,15 +4,17 @@ const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
+
+// Configuración global de CORS
 app.use(cors());
 app.use(express.json());
 
-// Servir archivos estáticos de la carpeta web
+// Servir archivos estáticos
 app.use(express.static(__dirname));
 
 // CONFIGURACIÓN DE CREDENCIALES DE SUPABASE
-const SUPABASE_URL = 'https://rpnlfmhtxwek.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_KIcwfPO2b9Sw4N7XY0EFDw_cmhfQRpO';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://rpnlfmhtxwek.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_KIcwfPO2b9Sw4N7XY0EFDw_cmhfQRpO';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -154,7 +156,6 @@ app.post('/api/reservas/:id/renovar', async (req, res) => {
     const { id } = req.params;
     const { diasExtra } = req.body;
 
-    // Buscar la reserva existente
     const { data: reserva, error: fetchErr } = await supabase
         .from('reservas')
         .select('*')
