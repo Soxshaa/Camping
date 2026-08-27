@@ -1,64 +1,101 @@
 const API_URL = 'https://camping-three-ochre.vercel.app/api/reservas';
+const CIERRES_URL = 'https://camping-three-ochre.vercel.app/api/cierres-caja';
+const LOGS_URL = 'https://camping-three-ochre.vercel.app/api/logs';
 
 const TARIFAS = {
     Camping: { adulto: 8000, nino: 6000 },
     Picnic:  { adulto: 7000, nino: 5000 }
 };
 
-const COMISION_TUU_PORCENTAJE = 0.029; // 2.9% comisión TUU Chile
-
 let reservasData = [];
 let idEdicionActual = null;
+let filtroActual = 'Todos';
 
 document.addEventListener("DOMContentLoaded", () => {
     configurarNavegacion();
     cargarReservas();
+    cargarLogs();
+    cargarCierresCaja();
     configurarFormulario();
+    configurarFiltrosYBusqueda();
+    configurarCajaYPDF();
+
+    setInterval(() => {
+        cargarReservas(true);
+    }, 15000);
 });
 
-// NAVEGACIÓN ENTRE VISTAS (HOME / RESERVAS / DASHBOARD)
+// NAVEGACIÓN
 function configurarNavegacion() {
     const navHome = document.getElementById("navHome");
     const navReservas = document.getElementById("navReservas");
     const navDashboard = document.getElementById("navDashboard");
+    const navLogs = document.getElementById("navLogs");
 
     const vistaHome = document.getElementById("vistaHome");
     const vistaReservas = document.getElementById("vistaReservas");
     const vistaDashboard = document.getElementById("vistaDashboard");
+    const vistaLogs = document.getElementById("vistaLogs");
 
     function cambiarVista(vistaActiva, navActivo) {
-        [vistaHome, vistaReservas, vistaDashboard].forEach(v => v.classList.add("hidden"));
-        [navHome, navReservas, navDashboard].forEach(n => n.classList.remove("active"));
+        [vistaHome, vistaReservas, vistaDashboard, vistaLogs].forEach(v => v?.classList.add("hidden"));
+        [navHome, navReservas, navDashboard, navLogs].forEach(n => n?.classList.remove("active"));
 
-        vistaActiva.classList.remove("hidden");
-        navActivo.classList.add("active");
+        vistaActiva?.classList.remove("hidden");
+        navActivo?.classList.add("active");
 
-        if (vistaActiva === vistaDashboard) actualizarEstadisticas();
+        if (vistaActiva === vistaDashboard) {
+            actualizarEstadisticas();
+            cargarCierresCaja();
+        }
+        if (vistaActiva === vistaLogs) cargarLogs();
     }
 
-    navHome.addEventListener("click", () => cambiarVista(vistaHome, navHome));
-    navReservas.addEventListener("click", () => cambiarVista(vistaReservas, navReservas));
-    navDashboard.addEventListener("click", () => cambiarVista(vistaDashboard, navDashboard));
+    navHome?.addEventListener("click", () => cambiarVista(vistaHome, navHome));
+    navReservas?.addEventListener("click", () => cambiarVista(vistaReservas, navReservas));
+    navDashboard?.addEventListener("click", () => cambiarVista(vistaDashboard, navDashboard));
+    navLogs?.addEventListener("click", () => cambiarVista(vistaLogs, navLogs));
 
-    // Botones de la pantalla Home
     document.getElementById("btnGoReservas")?.addEventListener("click", () => cambiarVista(vistaReservas, navReservas));
     document.getElementById("btnGoDashboard")?.addEventListener("click", () => cambiarVista(vistaDashboard, navDashboard));
+    document.getElementById("btnRefresh")?.addEventListener("click", () => cargarReservas());
+    document.getElementById("btnRefreshLogs")?.addEventListener("click", () => cargarLogs());
 }
 
-// OBTENER RESERVAS
-async function cargarReservas() {
+// OBTENER RESERVAS (PRINCIPAL)
+async function cargarReservas(silencioso = false) {
     try {
         const res = await fetch(API_URL);
         if (!res.ok) throw new Error("Error en el servidor");
-        reservasData = await res.json();
+        const data = await res.json();
+        
+        // Garantizar que la data sea un arreglo valido
+        reservasData = Array.isArray(data) ? data : [];
         renderizarReservas();
         actualizarEstadisticas();
     } catch (error) {
-        console.error("Error al cargar reservas:", error);
+        if (!silencioso) console.error("Error al cargar reservas:", error);
     }
 }
 
-// CÁLCULO DE CAJA Y ARQUEO
+// FILTROS Y BÚSQUEDA
+function configurarFiltrosYBusqueda() {
+    const inputBusqueda = document.getElementById("inputBusqueda");
+    const btnsFilter = document.querySelectorAll(".btn-filter");
+
+    inputBusqueda?.addEventListener("input", renderizarReservas);
+
+    btnsFilter.forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            btnsFilter.forEach(b => b.classList.remove("active"));
+            e.target.classList.add("active");
+            filtroActual = e.target.dataset.filter;
+            renderizarReservas();
+        });
+    });
+}
+
+// CÁLCULO DE DASHBOARD
 function actualizarEstadisticas() {
     let totalCamping = 0, totalPicnic = 0;
     let totalEfectivo = 0, totalTransferencia = 0, totalTarjetaBruto = 0;
@@ -69,31 +106,28 @@ function actualizarEstadisticas() {
     inicioSemana.setDate(ahora.getDate() - ahora.getDay());
     inicioSemana.setHours(0, 0, 0, 0);
 
-    reservasData.forEach(r => {
-        const monto = Number(r.monto_total) || 0;
-        const fecha = new Date(r.fecha_ingreso);
+    if (Array.isArray(reservasData)) {
+        reservasData.forEach(r => {
+            const monto = Number(r.monto_total) || 0;
+            const fecha = new Date(r.fecha_ingreso || r.created_at || Date.now());
 
-        if (r.tipo === "Camping") totalCamping += monto;
-        if (r.tipo === "Picnic") totalPicnic += monto;
+            if (r.tipo === "Camping") totalCamping += monto;
+            if (r.tipo === "Picnic") totalPicnic += monto;
 
-        if (r.metodo_pago === "Efectivo") totalEfectivo += monto;
-        if (r.metodo_pago === "Transferencia") totalTransferencia += monto;
-        if (r.metodo_pago === "Tarjeta" || r.metodo_pago === "Débito") totalTarjetaBruto += monto;
+            if (r.metodo_pago === "Efectivo") totalEfectivo += monto;
+            if (r.metodo_pago === "Transferencia") totalTransferencia += monto;
+            if (r.metodo_pago === "Tarjeta" || r.metodo_pago === "Débito") totalTarjetaBruto += monto;
 
-        if (fecha >= inicioSemana) totalSemana += monto;
-    });
+            if (fecha >= inicioSemana) totalSemana += monto;
+        });
+    }
 
-    const cobroIva = totalTarjetaBruto * 0.19;
-    const cobroComision = totalTarjetaBruto * COMISION_TUU_PORCENTAJE;
-    const totalTarjetaNeto = Math.max(0, totalTarjetaBruto - (cobroIva + cobroComision));
+    const totalCaja = totalEfectivo + totalTransferencia + totalTarjetaBruto;
 
-    const totalCaja = totalEfectivo + totalTransferencia + totalTarjetaNeto;
-
-    setTxt("statTotalCaja", `$${Math.round(totalCaja).toLocaleString("es-CL")}`);
+    setTxt("statTotalCaja", `$${totalCaja.toLocaleString("es-CL")}`);
     setTxt("statEfectivo", `$${totalEfectivo.toLocaleString("es-CL")}`);
     setTxt("statTransferencia", `$${totalTransferencia.toLocaleString("es-CL")}`);
     setTxt("statTarjetaBruto", `$${totalTarjetaBruto.toLocaleString("es-CL")}`);
-    setTxt("statTarjetaNeto", `$${Math.round(totalTarjetaNeto).toLocaleString("es-CL")}`);
     setTxt("statCamping", `$${totalCamping.toLocaleString("es-CL")}`);
     setTxt("statPicnic", `$${totalPicnic.toLocaleString("es-CL")}`);
     setTxt("statTotalSemana", `$${totalSemana.toLocaleString("es-CL")}`);
@@ -104,20 +138,23 @@ function setTxt(id, val) {
     if (el) el.innerText = val;
 }
 
-// FORMULARIO Y MODAL
+// FORMULARIO DE RESERVAS
 function configurarFormulario() {
     const modalForm = document.getElementById("modalForm");
     
     document.getElementById("btnNuevaReserva")?.addEventListener("click", () => {
         idEdicionActual = null;
-        document.getElementById("formReserva").reset();
-        document.querySelector(".modal-title").innerText = "Registrar Nueva Reserva";
-        modalForm.classList.remove("hidden");
+        document.getElementById("formReserva")?.reset();
+        const tituloModal = document.querySelector(".modal-title");
+        if (tituloModal) tituloModal.innerText = "Registrar Nueva Reserva";
+        modalForm?.classList.remove("hidden");
         calcularTotal();
     });
 
     document.getElementById("btnCerrarModal")?.addEventListener("click", () => {
-        modalForm.classList.add("hidden");
+        modalForm?.classList.add("hidden");
+        document.getElementById("formReserva")?.reset();
+        idEdicionActual = null;
     });
 
     ["tipo", "adultos", "ninos", "diasEstadia"].forEach(id => {
@@ -127,11 +164,13 @@ function configurarFormulario() {
 
     document.getElementById("tipo")?.addEventListener("change", (e) => {
         const inputDias = document.getElementById("diasEstadia");
-        if (e.target.value === "Picnic") {
-            inputDias.value = 1;
-            inputDias.disabled = true;
-        } else {
-            inputDias.disabled = false;
+        if (inputDias) {
+            if (e.target.value === "Picnic") {
+                inputDias.value = 1;
+                inputDias.disabled = true;
+            } else {
+                inputDias.disabled = false;
+            }
         }
         calcularTotal();
     });
@@ -155,18 +194,26 @@ function calcularTotal() {
 async function guardarReserva(e) {
     e.preventDefault();
 
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    if (submitBtn) {
+        if (submitBtn.disabled) return;
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Guardando...";
+    }
+
     const payload = {
-        titular: document.getElementById("nombre").value,
-        rut: document.getElementById("rut").value,
-        patente: document.getElementById("patente").value,
-        telefono_emergencia: document.getElementById("contacto").value,
-        tipo: document.getElementById("tipo").value,
-        adultos: Number(document.getElementById("adultos").value),
-        ninos: Number(document.getElementById("ninos").value),
-        mesa_sitio: document.getElementById("ubicacion").value,
-        dias: Number(document.getElementById("diasEstadia").value),
-        metodo_pago: document.getElementById("metodoPago").value,
-        esta_al_dia: document.getElementById("estaAlDia").value === "true"
+        usuario: document.getElementById("usuarioForm")?.value || "Génesis",
+        titular: document.getElementById("nombre")?.value || "",
+        rut: document.getElementById("rut")?.value || "",
+        patente: document.getElementById("patente")?.value || "",
+        telefono_emergencia: document.getElementById("contacto")?.value || "",
+        tipo: document.getElementById("tipo")?.value || "Camping",
+        adultos: Number(document.getElementById("adultos")?.value) || 1,
+        ninos: Number(document.getElementById("ninos")?.value) || 0,
+        mesa_sitio: document.getElementById("ubicacion")?.value || "",
+        dias: Number(document.getElementById("diasEstadia")?.value) || 1,
+        metodo_pago: document.getElementById("metodoPago")?.value || "Efectivo",
+        esta_al_dia: document.getElementById("estaAlDia")?.value === "true"
     };
 
     try {
@@ -182,27 +229,47 @@ async function guardarReserva(e) {
         if (!res.ok) throw new Error("Fallo al guardar");
 
         await cargarReservas();
-        document.getElementById("formReserva").reset();
+        document.getElementById("formReserva")?.reset();
         idEdicionActual = null;
-        document.getElementById("modalForm").classList.add("hidden");
+        document.getElementById("modalForm")?.classList.add("hidden");
     } catch (err) {
         alert("Error al guardar: " + err.message);
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerText = "Guardar Registro";
+        }
     }
 }
 
-// RENDERIZAR VISTA RESERVAS
+// RENDERIZAR RESERVAS EN PANTALLA
 function renderizarReservas() {
     const contenedor = document.getElementById("listaReservas");
     if (!contenedor) return;
 
     contenedor.innerHTML = "";
 
-    if (reservasData.length === 0) {
-        contenedor.innerHTML = `<div style="text-align:center; color:#94a3b8; margin-top:20px;">No hay reservas registradas.</div>`;
+    const textoBusqueda = document.getElementById("inputBusqueda")?.value.toLowerCase() || "";
+
+    if (!Array.isArray(reservasData)) {
+        contenedor.innerHTML = `<div style="text-align:center; color:#94a3b8; margin-top:20px;">No hay registros cargados.</div>`;
         return;
     }
 
-    reservasData.forEach(r => {
+    const reservasFiltradas = reservasData.filter(r => {
+        const coincideFiltro = filtroActual === 'Todos' || r.tipo === filtroActual;
+        const coincideTexto = r.titular?.toLowerCase().includes(textoBusqueda) ||
+                              r.rut?.toLowerCase().includes(textoBusqueda) ||
+                              r.patente?.toLowerCase().includes(textoBusqueda);
+        return coincideFiltro && coincideTexto;
+    });
+
+    if (reservasFiltradas.length === 0) {
+        contenedor.innerHTML = `<div style="text-align:center; color:#94a3b8; margin-top:20px;">No hay registros coincidentes.</div>`;
+        return;
+    }
+
+    reservasFiltradas.forEach(r => {
         const esCamping = r.tipo === "Camping";
         const totalPersonas = (r.adultos || 0) + (r.ninos || 0);
 
@@ -220,8 +287,8 @@ function renderizarReservas() {
                     <div>📞 <b>Contacto:</b> ${r.telefono_emergencia}</div>
                     <div>👥 <b>Grupo:</b> ${totalPersonas} (${r.adultos}A / ${r.ninos}N)</div>
                     <div>📍 <b>Ubicación:</b> ${r.mesa_sitio}</div>
-                    <div>💵 <b>Pagó:</b> <span class="price">$${Number(r.monto_total).toLocaleString("es-CL")}</span></div>
-                    <div>📥 <b>Llegada:</b> ${formatearFecha(r.fecha_ingreso)}</div>
+                    <div>💵 <b>Pagó:</b> <span class="price">$${Number(r.monto_total || 0).toLocaleString("es-CL")}</span></div>
+                    <div>📥 <b>Llegada:</b> ${formatearFecha(r.fecha_ingreso || r.created_at)}</div>
                     <div>⏰ <b>Check-Out:</b> <b>${formatearFecha(r.fecha_checkout)}</b></div>
                 </div>
 
@@ -247,28 +314,30 @@ function abrirEditarReserva(id) {
     if (!r) return;
 
     idEdicionActual = id;
-    document.querySelector(".modal-title").innerText = "Editar Reserva";
+    const tituloModal = document.querySelector(".modal-title");
+    if (tituloModal) tituloModal.innerText = "Editar Reserva";
 
-    document.getElementById("nombre").value = r.titular;
-    document.getElementById("rut").value = r.rut;
+    document.getElementById("nombre").value = r.titular || "";
+    document.getElementById("rut").value = r.rut || "";
     document.getElementById("patente").value = r.patente || "";
-    document.getElementById("contacto").value = r.telefono_emergencia;
-    document.getElementById("tipo").value = r.tipo;
-    document.getElementById("adultos").value = r.adultos;
-    document.getElementById("ninos").value = r.ninos;
-    document.getElementById("ubicacion").value = r.mesa_sitio;
-    document.getElementById("diasEstadia").value = r.dias;
+    document.getElementById("contacto").value = r.telefono_emergencia || "";
+    document.getElementById("tipo").value = r.tipo || "Camping";
+    document.getElementById("adultos").value = r.adultos || 1;
+    document.getElementById("ninos").value = r.ninos || 0;
+    document.getElementById("ubicacion").value = r.mesa_sitio || "";
+    document.getElementById("diasEstadia").value = r.dias || 1;
     document.getElementById("metodoPago").value = r.metodo_pago || "Efectivo";
     document.getElementById("estaAlDia").value = r.esta_al_dia ? "true" : "false";
 
-    document.getElementById("modalForm").classList.remove("hidden");
+    document.getElementById("modalForm")?.classList.remove("hidden");
     calcularTotal();
 }
 
 async function eliminarReserva(id) {
     if (confirm("¿Eliminar este registro?")) {
         try {
-            await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+            const usuario = prompt("Introduce tu nombre (Génesis / Maxi):", "Génesis") || "Staff";
+            await fetch(`${API_URL}/${id}?usuario=${encodeURIComponent(usuario)}`, { method: 'DELETE' });
             await cargarReservas();
         } catch (err) {
             console.error("Error al eliminar:", err);
@@ -289,8 +358,131 @@ async function renovarDia(id) {
     }
 }
 
+// LOGS (PROTEGIDO CONTRA ERRORES DE TABLA)
+async function cargarLogs() {
+    try {
+        const res = await fetch(LOGS_URL);
+        if (!res.ok) return; // Omisión silenciosa si falla o no existe la tabla
+        const logs = await res.json();
+        const contenedor = document.getElementById("contenedorLogs");
+        if (!contenedor || !Array.isArray(logs)) return;
+
+        contenedor.innerHTML = "";
+        logs.forEach(log => {
+            contenedor.innerHTML += `
+                <div class="log-card">
+                    <div class="log-header">
+                        <span>${log.accion || 'ACCION'}</span>
+                        <span>👤 ${log.usuario || 'Staff'}</span>
+                    </div>
+                    <div class="log-body">${log.detalle || ''}</div>
+                    <div class="log-date">${formatearFecha(log.fecha)}</div>
+                </div>
+            `;
+        });
+    } catch (e) {
+        console.warn("Logs no disponibles por el momento.");
+    }
+}
+
+// ENTREGAS DE CAJA (PROTEGIDO CONTRA ERRORES DE TABLA)
+function configurarCajaYPDF() {
+    const modalCaja = document.getElementById("modalCaja");
+    
+    document.getElementById("btnAbrirModalCaja")?.addEventListener("click", () => {
+        modalCaja?.classList.remove("hidden");
+    });
+
+    document.getElementById("btnCerrarModalCaja")?.addEventListener("click", () => {
+        modalCaja?.classList.add("hidden");
+    });
+
+    document.getElementById("formCierreCaja")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const portero = document.getElementById("cajaPortero")?.value || "Génesis";
+        const dueno = document.getElementById("cajaDueno")?.value || "Olga";
+        const monto = document.getElementById("cajaMonto")?.value || 0;
+        const observaciones = document.getElementById("cajaObs")?.value || "";
+
+        try {
+            const res = await fetch(CIERRES_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ portero, dueno, monto, observaciones })
+            });
+            
+            if (!res.ok) throw new Error("Asegúrate de haber creado la tabla 'cierres_caja' en Supabase.");
+
+            modalCaja?.classList.add("hidden");
+            document.getElementById("formCierreCaja")?.reset();
+            await cargarCierresCaja();
+            alert("Entrega de caja guardada con éxito.");
+        } catch (err) {
+            alert("Error registrando entrega: " + err.message);
+        }
+    });
+
+    document.getElementById("btnExportarPDF")?.addEventListener("click", exportarPDF);
+}
+
+async function cargarCierresCaja() {
+    try {
+        const res = await fetch(CIERRES_URL);
+        if (!res.ok) return; // Omisión silenciosa si la tabla no existe
+        const cierres = await res.json();
+        const contenedor = document.getElementById("historialCierres");
+        if (!contenedor || !Array.isArray(cierres)) return;
+
+        contenedor.innerHTML = "<b>Últimas Entregas:</b>";
+        cierres.slice(0, 5).forEach(c => {
+            contenedor.innerHTML += `
+                <div class="cierre-item">
+                    💰 <b>$${Number(c.monto || 0).toLocaleString("es-CL")}</b> de <b>${c.portero || ''}</b> a <b>${c.dueno || ''}</b>
+                    <br><small>${formatearFecha(c.fecha)} ${c.observaciones ? '- ' + c.observaciones : ''}</small>
+                </div>
+            `;
+        });
+    } catch (e) {
+        console.warn("Cierres de caja no disponibles por el momento.");
+    }
+}
+
+// EXPORTAR PDF
+function exportarPDF() {
+    if (!window.jspdf) {
+        alert("Cargando módulo PDF... reintenta en un momento.");
+        return;
+    }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    doc.setFontSize(16);
+    doc.text("Camping Los Maitenes - Reporte de Arqueo", 14, 20);
+    doc.setFontSize(10);
+    doc.text(`Fecha de emisión: ${new Date().toLocaleString("es-CL")}`, 14, 28);
+
+    const tablaReservas = (Array.isArray(reservasData) ? reservasData : []).map(r => [
+        r.titular || '',
+        r.tipo || '',
+        r.mesa_sitio || '',
+        r.metodo_pago || '',
+        `$${Number(r.monto_total || 0).toLocaleString("es-CL")}`
+    ]);
+
+    if (typeof doc.autoTable === 'function') {
+        doc.autoTable({
+            startY: 35,
+            head: [['Titular', 'Servicio', 'Ubicación', 'Método Pago', 'Monto']],
+            body: tablaReservas,
+        });
+    }
+
+    doc.save(`Arqueo_LosMaitenes_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
 function formatearFecha(isoString) {
     if (!isoString) return "-";
     const date = new Date(isoString);
+    if (isNaN(date.getTime())) return "-";
     return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }

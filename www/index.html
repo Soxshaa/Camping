@@ -5,10 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Staff Los Maitenes</title>
     <link rel="stylesheet" href="./style.css">
+    
+    <!-- Librerías de PDF corregidas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
 
-    <!-- PANTALLA 1: HOME / BIENVENIDA -->
+    <!-- PANTALLA 1: HOME -->
     <div id="vistaHome" class="vista-container">
         <div class="hero-card">
             <div class="hero-overlay"></div>
@@ -31,8 +35,21 @@
                 <div class="title">⛺ Control Recepción</div>
                 <div class="subtitle">Registros de Camping y Picnic</div>
             </div>
-            <button class="btn-add" id="btnNuevaReserva">+ Nueva</button>
+            <div class="header-actions">
+                <button class="btn-refresh" id="btnRefresh">🔄 Refrescar</button>
+                <button class="btn-add" id="btnNuevaReserva">+ Nueva</button>
+            </div>
         </div>
+
+        <div class="filter-bar">
+            <input type="text" id="inputBusqueda" placeholder="🔍 Buscar por Nombre, RUT o Patente..." class="search-input">
+            <div class="filter-buttons">
+                <button class="btn-filter active" data-filter="Todos">Todos</button>
+                <button class="btn-filter" data-filter="Camping">Camping</button>
+                <button class="btn-filter" data-filter="Picnic">Picnic</button>
+            </div>
+        </div>
+
         <div class="card-container" id="listaReservas"></div>
     </div>
 
@@ -41,17 +58,18 @@
         <div class="header">
             <div>
                 <div class="title">📊 Staff Los Maitenes</div>
-                <div class="subtitle">Resumen Financiero & Caja</div>
+                <div class="subtitle">Resumen Financiero & Arqueo</div>
             </div>
+            <button class="btn-pdf" id="btnExportarPDF">📄 Reporte PDF</button>
         </div>
 
         <div class="dash-card main-card">
             <div class="dash-title">💵 DINERO TOTAL ESTIMADO EN CAJA</div>
             <div class="dash-value" id="statTotalCaja">$0</div>
-            <div class="dash-sub">Sumatoria neta de todos los métodos de pago</div>
+            <div class="dash-sub">Sumatoria total de todos los métodos de pago</div>
         </div>
 
-        <div class="section-label">DESGLOSE DE INGRESOS</div>
+        <div class="section-label">DESGLOSE DE INGRESOS (INCLUYE IVA/BRUTO)</div>
         <div class="grid-2">
             <div class="dash-card">
                 <div class="dash-title">💵 Efectivo</div>
@@ -65,11 +83,9 @@
 
         <div class="dash-card">
             <div class="dash-title-row">
-                <span class="dash-title">💳 Tarjeta (TUU Chile)</span>
-                <span class="badge-discount">Descuento ~19.5%</span>
+                <span class="dash-title">💳 Tarjeta / TUU</span>
             </div>
-            <div class="dash-value" id="statTarjetaBruto">$0 (Bruto)</div>
-            <div class="dash-sub">Neto a recibir: <b id="statTarjetaNeto">$0</b></div>
+            <div class="dash-value" id="statTarjetaBruto">$0</div>
         </div>
 
         <div class="section-label">INGRESOS Y RECAUDACIÓN SEMANAL</div>
@@ -88,15 +104,41 @@
             <div class="dash-title">📅 Ganancia de la Semana</div>
             <div class="dash-value" id="statTotalSemana">$0</div>
         </div>
+
+        <div class="section-label">🔒 CONTROL Y ENTREGA DE CAJA</div>
+        <div class="dash-card action-card">
+            <button class="btn-hacer-caja" id="btnAbrirModalCaja">💰 Entregar / Hacer Caja</button>
+            <div id="historialCierres" class="cierres-list"></div>
+        </div>
     </div>
 
-    <!-- MODAL FORMULARIO DE RESERVAS -->
+    <!-- PANTALLA 4: LOGS / MOVIMIENTOS -->
+    <div id="vistaLogs" class="vista-container hidden">
+        <div class="header">
+            <div>
+                <div class="title">📜 Registro de Auditoría</div>
+                <div class="subtitle">Historial de acciones de usuarios</div>
+            </div>
+            <button class="btn-refresh" id="btnRefreshLogs">🔄 Refrescar</button>
+        </div>
+        <div id="contenedorLogs" class="logs-container"></div>
+    </div>
+
+    <!-- MODAL RESERVA -->
     <div id="modalForm" class="modal hidden">
         <div class="modal-content">
             <span class="close-btn" id="btnCerrarModal">&times;</span>
             <h3 class="modal-title">Registrar Nueva Reserva</h3>
             
             <form id="formReserva">
+                <div class="form-group">
+                    <label>Encargado (Portero)</label>
+                    <select id="usuarioForm" required>
+                        <option value="Génesis">Génesis</option>
+                        <option value="Maxi">Maxi</option>
+                    </select>
+                </div>
+
                 <div class="form-group">
                     <label>Nombre Titular</label>
                     <input type="text" id="nombre" required placeholder="Ej: Juan Pérez">
@@ -177,7 +219,45 @@
         </div>
     </div>
 
-    <!-- NAVBAR INFERIOR DE 3 BOTONES -->
+    <!-- MODAL ENTREGAR / HACER CAJA -->
+    <div id="modalCaja" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" id="btnCerrarModalCaja">&times;</span>
+            <h3 class="modal-title">💰 Hacer / Entrega de Caja</h3>
+            
+            <form id="formCierreCaja">
+                <div class="form-group">
+                    <label>Portero a Cargo</label>
+                    <select id="cajaPortero" required>
+                        <option value="Maxi">Maxi</option>
+                        <option value="Génesis">Génesis</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Dueño que recibe el dinero</label>
+                    <select id="cajaDueno" required>
+                        <option value="Olga">Olga</option>
+                        <option value="Pedro">Pedro</option>
+                        <option value="Majusy">Majusy</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Monto Entregado ($)</label>
+                    <input type="number" id="cajaMonto" required placeholder="Ej: 50000">
+                </div>
+
+                <div class="form-group">
+                    <label>Observaciones / Nota</label>
+                    <input type="text" id="cajaObs" placeholder="Ej: Arqueo parcial tarde">
+                </div>
+
+                <button type="submit" class="btn-submit">Confirmar y Guardar Entrega</button>
+            </form>
+        </div>
+    </div>
+
     <nav class="bottom-nav">
         <button id="navHome" class="nav-item active">
             <span class="nav-icon">🏠</span>
@@ -190,6 +270,10 @@
         <button id="navDashboard" class="nav-item">
             <span class="nav-icon">📊</span>
             <span class="nav-text">Dashboard</span>
+        </button>
+        <button id="navLogs" class="nav-item">
+            <span class="nav-icon">📜</span>
+            <span class="nav-text">Logs</span>
         </button>
     </nav>
 
