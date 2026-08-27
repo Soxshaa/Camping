@@ -1,4 +1,4 @@
-const API_URL = 'http://192.168.1.83:3000/api/reservas';
+const API_URL = 'https://camping-three-ochre.vercel.app/api/reservas';
 
 const TARIFAS = {
     Camping: { adulto: 8000, nino: 6000 },
