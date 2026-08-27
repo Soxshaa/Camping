@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Staff Los Maitenes</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+    <!-- PANTALLA 1: HOME / BIENVENIDA -->
+    <div id="vistaHome" class="vista-container">
+        <div class="hero-card">
+            <div class="hero-overlay"></div>
+            <div class="hero-content">
+                <span class="badge-hero">🏕️ Staff Interno</span>
+                <h1>Bienvenido a Los Maitenes</h1>
+                <p>Sistema de Gestión de Recepción & Arqueo de Caja</p>
+                <div class="hero-actions">
+                    <button class="btn-hero primary" id="btnGoReservas">📋 Ver Reservas</button>
+                    <button class="btn-hero secondary" id="btnGoDashboard">📊 Ver Caja & Stats</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PANTALLA 2: LISTA DE RESERVAS -->
+    <div id="vistaReservas" class="vista-container hidden">
+        <div class="header">
+            <div>
+                <div class="title">⛺ Control Recepción</div>
+                <div class="subtitle">Registros de Camping y Picnic</div>
+            </div>
+            <button class="btn-add" id="btnNuevaReserva">+ Nueva</button>
+        </div>
+        <div class="card-container" id="listaReservas"></div>
+    </div>
+
+    <!-- PANTALLA 3: DASHBOARD Y ARQUEO -->
+    <div id="vistaDashboard" class="vista-container hidden">
+        <div class="header">
+            <div>
+                <div class="title">📊 Staff Los Maitenes</div>
+                <div class="subtitle">Resumen Financiero & Caja</div>
+            </div>
+        </div>
+
+        <div class="dash-card main-card">
+            <div class="dash-title">💵 DINERO TOTAL ESTIMADO EN CAJA</div>
+            <div class="dash-value" id="statTotalCaja">$0</div>
+            <div class="dash-sub">Sumatoria neta de todos los métodos de pago</div>
+        </div>
+
+        <div class="section-label">DESGLOSE DE INGRESOS</div>
+        <div class="grid-2">
+            <div class="dash-card">
+                <div class="dash-title">💵 Efectivo</div>
+                <div class="dash-value" id="statEfectivo">$0</div>
+            </div>
+            <div class="dash-card">
+                <div class="dash-title">📲 Transferencia</div>
+                <div class="dash-value" id="statTransferencia">$0</div>
+            </div>
+        </div>
+
+        <div class="dash-card">
+            <div class="dash-title-row">
+                <span class="dash-title">💳 Tarjeta (TUU Chile)</span>
+                <span class="badge-discount">Descuento ~19.5%</span>
+            </div>
+            <div class="dash-value" id="statTarjetaBruto">$0 (Bruto)</div>
+            <div class="dash-sub">Neto a recibir: <b id="statTarjetaNeto">$0</b></div>
+        </div>
+
+        <div class="section-label">INGRESOS Y RECAUDACIÓN SEMANAL</div>
+        <div class="grid-2">
+            <div class="dash-card">
+                <div class="dash-title">⛺ Camping</div>
+                <div class="dash-value" id="statCamping">$0</div>
+            </div>
+            <div class="dash-card">
+                <div class="dash-title">🧺 Picnic</div>
+                <div class="dash-value" id="statPicnic">$0</div>
+            </div>
+        </div>
+
+        <div class="dash-card highlight-card">
+            <div class="dash-title">📅 Ganancia de la Semana</div>
+            <div class="dash-value" id="statTotalSemana">$0</div>
+        </div>
+    </div>
+
+    <!-- MODAL FORMULARIO DE RESERVAS -->
+    <div id="modalForm" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" id="btnCerrarModal">&times;</span>
+            <h3 class="modal-title">Registrar Nueva Reserva</h3>
+            
+            <form id="formReserva">
+                <div class="form-group">
+                    <label>Nombre Titular</label>
+                    <input type="text" id="nombre" required placeholder="Ej: Juan Pérez">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>RUT</label>
+                        <input type="text" id="rut" required placeholder="12.345.678-9">
+                    </div>
+                    <div class="form-group">
+                        <label>Patente</label>
+                        <input type="text" id="patente" required placeholder="BB-CL-10">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Contacto</label>
+                        <input type="tel" id="contacto" required placeholder="+56 9 ...">
+                    </div>
+                    <div class="form-group">
+                        <label>Servicio</label>
+                        <select id="tipo">
+                            <option value="Camping">Camping (9 AM a 9 AM)</option>
+                            <option value="Picnic">Picnic (Pasadía)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Adultos</label>
+                        <input type="number" id="adultos" min="1" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Niños (3-10)</label>
+                        <input type="number" id="ninos" min="0" value="0" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Ubicación</label>
+                        <input type="text" id="ubicacion" required placeholder="Sitio 04 / Mesa 12">
+                    </div>
+                    <div class="form-group">
+                        <label>Días / Noches</label>
+                        <input type="number" id="diasEstadia" min="1" value="1" required>
+                    </div>
+                </div>
+
+                <div class="highlight-box">
+                    <div class="form-group">
+                        <label>Total a Cobrar</label>
+                        <input type="text" id="montoPagado" readonly class="input-total" value="$8.000">
+                    </div>
+                    <div class="form-group">
+                        <label>Método de Pago</label>
+                        <select id="metodoPago">
+                            <option value="Efectivo">Efectivo</option>
+                            <option value="Transferencia">Transferencia</option>
+                            <option value="Tarjeta">Tarjeta / TUU</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Estado del Pago</label>
+                    <select id="estaAlDia">
+                        <option value="true">🟢 Pagó Completo (Al día)</option>
+                        <option value="false">🔴 Abono Parcial / Pendiente</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-submit">Guardar Registro</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- NAVBAR INFERIOR DE 3 BOTONES -->
+    <nav class="bottom-nav">
+        <button id="navHome" class="nav-item active">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-text">Home</span>
+        </button>
+        <button id="navReservas" class="nav-item">
+            <span class="nav-icon">⛺</span>
+            <span class="nav-text">Reservas</span>
+        </button>
+        <button id="navDashboard" class="nav-item">
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">Dashboard</span>
+        </button>
+    </nav>
+
+    <script src="./app.js"></script>
+</body>
+</html>
