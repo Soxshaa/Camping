@@ -207,10 +207,10 @@ async function guardarReserva(e) {
         patente: document.getElementById("patente")?.value || "",
         telefono_emergencia: document.getElementById("contacto")?.value || "",
         tipo: document.getElementById("tipo")?.value || "Camping",
-        adultos: Number(document.getElementById("adultos")?.value) || 1,
-        ninos: Number(document.getElementById("ninos")?.value) || 0,
+        adultos: parseInt(document.getElementById("adultos")?.value || 1, 10),
+        ninos: parseInt(document.getElementById("ninos")?.value || 0, 10),
         mesa_sitio: document.getElementById("ubicacion")?.value || "",
-        dias: Number(document.getElementById("diasEstadia")?.value) || 1,
+        dias: parseInt(document.getElementById("diasEstadia")?.value || 1, 10),
         metodo_pago: document.getElementById("metodoPago")?.value || "Efectivo",
         esta_al_dia: document.getElementById("estaAlDia")?.value === "true"
     };
@@ -270,22 +270,24 @@ function renderizarReservas() {
 
     reservasFiltradas.forEach(r => {
         const esCamping = r.tipo === "Camping";
-        const totalPersonas = (r.adultos || 0) + (r.ninos || 0);
+        const numAdultos = Number(r.adultos) || 1;
+        const numNinos = Number(r.ninos) || 0;
+        const totalPersonas = numAdultos + numNinos;
 
         const cardHTML = `
             <div class="card">
                 <div class="card-header">
                     <div>
                         <div class="guest-name">${r.titular}</div>
-                        <div class="guest-subtext">RUT: ${r.rut} | Patente: <b>${r.patente || 'Sin Vehículo'}</b></div>
+                        <div class="guest-subtext">RUT: ${r.rut || 'N/A'} | Patente: <b>${r.patente || 'Sin Vehículo'}</b></div>
                         <div class="guest-subtext" style="color: #00f2fe; margin-top: 3px;">👮 Ingresado por: <b>${r.usuario || 'Portería'}</b></div>
                     </div>
                     <span class="badge ${esCamping ? 'badge-camping' : 'badge-picnic'}">${r.tipo}</span>
                 </div>
 
                 <div class="grid-info">
-                    <div>📞 <b>Contacto:</b> ${r.telefono_emergencia}</div>
-                    <div>👥 <b>Grupo:</b> ${totalPersonas} (${r.adultos}A / ${r.ninos}N)</div>
+                    <div>📞 <b>Contacto:</b> ${r.telefono_emergencia || 'N/A'}</div>
+                    <div>👥 <b>Grupo:</b> ${totalPersonas} (${numAdultos}A / ${numNinos}N)</div>
                     <div>📍 <b>Ubicación:</b> ${r.mesa_sitio}</div>
                     <div>💵 <b>Pagó:</b> <span class="price">$${Number(r.monto_total || 0).toLocaleString("es-CL")}</span></div>
                     <div>📥 <b>Llegada:</b> ${formatearFecha(r.fecha_ingreso || r.created_at)}</div>
@@ -322,10 +324,10 @@ function abrirEditarReserva(id) {
     document.getElementById("patente").value = r.patente || "";
     document.getElementById("contacto").value = r.telefono_emergencia || "";
     document.getElementById("tipo").value = r.tipo || "Camping";
-    document.getElementById("adultos").value = r.adultos || 1;
-    document.getElementById("ninos").value = r.ninos || 0;
+    document.getElementById("adultos").value = Number(r.adultos) || 1;
+    document.getElementById("ninos").value = Number(r.ninos) || 0;
     document.getElementById("ubicacion").value = r.mesa_sitio || "";
-    document.getElementById("diasEstadia").value = r.dias || 1;
+    document.getElementById("diasEstadia").value = Number(r.dias) || 1;
     document.getElementById("metodoPago").value = r.metodo_pago || "Efectivo";
     document.getElementById("estaAlDia").value = r.esta_al_dia ? "true" : "false";
 

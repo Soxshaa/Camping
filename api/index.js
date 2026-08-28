@@ -31,7 +31,6 @@ function calcularCheckout(tipo, dias) {
     }
 }
 
-// FUNCIÓN AUXILIAR PARA REGISTRAR AUDITORÍA Y LOGS
 async function registrarLog(accion, detalle, usuario = 'Staff') {
     try {
         await supabase.from('logs').insert([{ accion, detalle, usuario, fecha: new Date().toISOString() }]);
@@ -52,13 +51,14 @@ app.get('/api/reservas', async (req, res) => {
     }
 });
 
+// NUEVO REGISTRO
 app.post('/api/reservas', async (req, res) => {
     try {
         const { titular, rut, patente, telefono_emergencia, tipo, adultos, ninos, mesa_sitio, dias, metodo_pago, esta_al_dia, usuario } = req.body;
         
-        const numAdultos = parseInt(adultos || 1);
-        const numNinos = parseInt(ninos || 0);
-        const numDias = tipo === 'Camping' ? parseInt(dias || 1) : 1;
+        const numAdultos = parseInt(adultos || 1, 10);
+        const numNinos = parseInt(ninos || 0, 10);
+        const numDias = tipo === 'Camping' ? parseInt(dias || 1, 10) : 1;
 
         const tarifa = TARIFAS[tipo];
         let montoTotal = (numAdultos * tarifa.adulto) + (numNinos * tarifa.nino);
@@ -79,14 +79,17 @@ app.post('/api/reservas', async (req, res) => {
 
         if (error) throw error;
 
-        // LOG DETALLADO DE INGRESO
-        const detalleIngreso = `📥 NUEVO INGRESO por Portero [${porteroResponsable}]\n` +
-            `• Titular: ${titular} (RUT: ${rut})\n` +
-            `• Vehículo / Patente: ${patente || 'Sin Vehículo'}\n` +
-            `• Tipo: ${tipo} (${numAdultos}A / ${numNinos}N) - Sitio: ${mesa_sitio}\n` +
-            `• Cobro: $${montoTotal.toLocaleString('es-CL')} via ${metodo_pago}`;
+        const detalleIngreso = `📋 NUEVO REGISTRO EN PORTERÍA [${porteroResponsable}]:\n` +
+            `• Titular: ${titular} (RUT: ${rut || 'N/A'})\n` +
+            `• Patente: ${patente || 'Sin Vehículo'}\n` +
+            `• Teléfono: ${telefono_emergencia || 'N/A'}\n` +
+            `• Servicio: ${tipo} en '${mesa_sitio}'\n` +
+            `• Cantidad Personas: ${numAdultos} Adultos / ${numNinos} Niños\n` +
+            `• Estadía: ${numDias} día(s)\n` +
+            `• Cobro: $${montoTotal.toLocaleString('es-CL')} via ${metodo_pago}\n` +
+            `• Estado de Pago: ${esta_al_dia ? '🟢 Pagó Completo' : '🔴 Pago Pendiente'}`;
 
-        await registrarLog('REGISTRO PORTERÍA', detalleIngreso, porteroResponsable);
+        await registrarLog('NUEVO REGISTRO', detalleIngreso, porteroResponsable);
 
         res.json({ id: data[0].id, mensaje: "Reserva creada con éxito" });
     } catch (err) {
@@ -94,18 +97,19 @@ app.post('/api/reservas', async (req, res) => {
     }
 });
 
+// EDICIÓN DETALLADA (AUDITORÍA COMPLETA)
 app.put('/api/reservas/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { titular, rut, patente, telefono_emergencia, tipo, adultos, ninos, mesa_sitio, dias, metodo_pago, esta_al_dia, usuario } = req.body;
 
-        // 1. Obtener datos antes de la edición
+        // 1. Obtener datos antes de la actualización
         const { data: antes, error: errAntes } = await supabase.from('reservas').select('*').eq('id', id).single();
         if (errAntes || !antes) return res.status(404).json({ error: "Reserva no encontrada" });
 
-        const numAdultos = parseInt(adultos || 1);
-        const numNinos = parseInt(ninos || 0);
-        const numDias = tipo === 'Camping' ? parseInt(dias || 1) : 1;
+        const numAdultos = parseInt(adultos || 1, 10);
+        const numNinos = parseInt(ninos || 0, 10);
+        const numDias = tipo === 'Camping' ? parseInt(dias || 1, 10) : 1;
 
         const tarifa = TARIFAS[tipo];
         let montoTotal = (numAdultos * tarifa.adulto) + (numNinos * tarifa.nino);
@@ -114,7 +118,7 @@ app.put('/api/reservas/:id', async (req, res) => {
         const fechaCheckout = calcularCheckout(tipo, numDias);
         const porteroModificador = usuario || 'Maxi';
 
-        // 2. Actualizar en Supabase
+        // 2. Actualizar registro en Supabase
         const { error } = await supabase
             .from('reservas')
             .update({
@@ -126,17 +130,31 @@ app.put('/api/reservas/:id', async (req, res) => {
 
         if (error) throw error;
 
-        // 3. Generar auditoría estilo "Antes vs Después"
+        // 3. Normalización y comparación de campos
+        const prevAdultos = parseInt(antes.adultos ?? 1, 10);
+        const prevNinos = parseInt(antes.ninos ?? 0, 10);
+        const prevDias = parseInt(antes.dias ?? 1, 10);
+        const prevRut = antes.rut || 'N/A';
+        const prevPatente = antes.patente || 'Sin Vehículo';
+        const prevContacto = antes.telefono_emergencia || 'N/A';
+
         let cambios = [];
+
         if (antes.titular !== titular) cambios.push(`Titular: '${antes.titular}' ➔ '${titular}'`);
-        if (antes.patente !== patente) cambios.push(`Patente: '${antes.patente || 'N/A'}' ➔ '${patente || 'N/A'}'`);
+        if (prevRut !== (rut || 'N/A')) cambios.push(`RUT: '${prevRut}' ➔ '${rut || 'N/A'}'`);
+        if (prevPatente !== (patente || 'Sin Vehículo')) cambios.push(`Patente: '${prevPatente}' ➔ '${patente || 'Sin Vehículo'}'`);
+        if (prevContacto !== (telefono_emergencia || 'N/A')) cambios.push(`Teléfono: '${prevContacto}' ➔ '${telefono_emergencia || 'N/A'}'`);
+        if (antes.tipo !== tipo) cambios.push(`Servicio: '${antes.tipo}' ➔ '${tipo}'`);
+        if (prevAdultos !== numAdultos) cambios.push(`Adultos: ${prevAdultos} ➔ ${numAdultos}`);
+        if (prevNinos !== numNinos) cambios.push(`Niños: ${prevNinos} ➔ ${numNinos}`);
+        if (prevDias !== numDias) cambios.push(`Días Estadía: ${prevDias} ➔ ${numDias}`);
         if (antes.mesa_sitio !== mesa_sitio) cambios.push(`Ubicación: '${antes.mesa_sitio}' ➔ '${mesa_sitio}'`);
-        if (Number(antes.monto_total) !== montoTotal) cambios.push(`Monto: $${Number(antes.monto_total).toLocaleString('es-CL')} ➔ $${montoTotal.toLocaleString('es-CL')}`);
-        if (antes.metodo_pago !== metodo_pago) cambios.push(`Pago: '${antes.metodo_pago}' ➔ '${metodo_pago}'`);
+        if (Number(antes.monto_total) !== montoTotal) cambios.push(`Monto Total: $${Number(antes.monto_total).toLocaleString('es-CL')} ➔ $${montoTotal.toLocaleString('es-CL')}`);
+        if (antes.metodo_pago !== metodo_pago) cambios.push(`Método Pago: '${antes.metodo_pago}' ➔ '${metodo_pago}'`);
         if (antes.esta_al_dia !== Boolean(esta_al_dia)) cambios.push(`Estado Pago: '${antes.esta_al_dia ? 'Al día' : 'Pendiente'}' ➔ '${esta_al_dia ? 'Al día' : 'Pendiente'}'`);
 
-        const detalleAuditoria = `⚠️ MODIFICACIÓN REALIZADA POR [${porteroModificador}] a registro ID #${id} (${titular}):\n` +
-            (cambios.length > 0 ? `• CAMBIOS:\n  - ${cambios.join('\n  - ')}` : `• Se guardó el registro sin cambios de valores.`);
+        const detalleAuditoria = `⚠️ MODIFICACIÓN POR [${porteroModificador}] en Registro ID #${id} (${titular}):\n` +
+            (cambios.length > 0 ? `• DESGLOSE DE CAMBIOS:\n  - ${cambios.join('\n  - ')}` : `• Se guardó el registro sin variaciones.`);
 
         await registrarLog('EDICIÓN DETECTADA', detalleAuditoria, porteroModificador);
 
@@ -152,17 +170,17 @@ app.delete('/api/reservas/:id', async (req, res) => {
         const { usuario } = req.query;
         const porteroEliminador = usuario || 'Staff';
 
-        // Obtener datos antes de borrar
         const { data: antes } = await supabase.from('reservas').select('*').eq('id', id).single();
 
         const { error } = await supabase.from('reservas').delete().eq('id', id);
         if (error) throw error;
 
         const detalleBorrado = `🚨 ELIMINACIÓN DE REGISTRO por Portero [${porteroEliminador}]:\n` +
-            `• Registro Borrado ID #${id}\n` +
+            `• ID Borrado: #${id}\n` +
             `• Titular: ${antes?.titular || 'Desconocido'}\n` +
-            `• Patente: ${antes?.patente || 'N/A'}\n` +
-            `• Monto que estaba registrado: $${Number(antes?.monto_total || 0).toLocaleString('es-CL')}`;
+            `• Patente: ${antes?.patente || 'Sin Vehículo'}\n` +
+            `• Grupo: ${antes?.adultos || 1} Adultos / ${antes?.ninos || 0} Niños (${antes?.dias || 1} días)\n` +
+            `• Monto Registrado: $${Number(antes?.monto_total || 0).toLocaleString('es-CL')}`;
 
         await registrarLog('REGISTRO ELIMINADO', detalleBorrado, porteroEliminador);
 
@@ -181,12 +199,13 @@ app.post('/api/reservas/:id/renovar', async (req, res) => {
         const { data: reserva, error: fetchErr } = await supabase.from('reservas').select('*').eq('id', id).single();
         if (fetchErr || !reserva) return res.status(404).json({ error: "Reserva no encontrada" });
 
-        const nuevosDias = reserva.dias + parseInt(diasExtra);
-        const tarifaDiaria = (reserva.adultos * TARIFAS.Camping.adulto) + (reserva.ninos * TARIFAS.Camping.nino);
-        const nuevoMonto = Number(reserva.monto_total) + (tarifaDiaria * parseInt(diasExtra));
+        const prevDias = Number(reserva.dias || 1);
+        const nuevosDias = prevDias + parseInt(diasExtra, 10);
+        const tarifaDiaria = (Number(reserva.adultos || 1) * TARIFAS.Camping.adulto) + (Number(reserva.ninos || 0) * TARIFAS.Camping.nino);
+        const nuevoMonto = Number(reserva.monto_total) + (tarifaDiaria * parseInt(diasExtra, 10));
 
         const currentCheckout = new Date(reserva.fecha_checkout);
-        currentCheckout.setDate(currentCheckout.getDate() + parseInt(diasExtra));
+        currentCheckout.setDate(currentCheckout.getDate() + parseInt(diasExtra, 10));
 
         const { error: updateErr } = await supabase.from('reservas').update({
             dias: nuevosDias,
@@ -197,10 +216,10 @@ app.post('/api/reservas/:id/renovar', async (req, res) => {
 
         if (updateErr) throw updateErr;
 
-        const detalleRenovacion = `➕ RENOVACIÓN DE DÍA EXTRA por [${porteroRenovador}]:\n` +
-            `• Titular: ${reserva.titular}\n` +
-            `• Días previos: ${reserva.dias} ➔ Nuevos días: ${nuevosDias}\n` +
-            `• Monto anterior: $${Number(reserva.monto_total).toLocaleString('es-CL')} ➔ Nuevo total: $${nuevoMonto.toLocaleString('es-CL')}`;
+        const detalleRenovacion = `➕ RENOVACIÓN (+${diasExtra} DÍA) por [${porteroRenovador}]:\n` +
+            `• Titular: ${reserva.titular} (Patente: ${reserva.patente || 'Sin Vehículo'})\n` +
+            `• Días Estadía: ${prevDias} ➔ ${nuevosDias} día(s)\n` +
+            `• Monto Total: $${Number(reserva.monto_total).toLocaleString('es-CL')} ➔ $${nuevoMonto.toLocaleString('es-CL')}`;
 
         await registrarLog('RENOVACIÓN ESTADÍA', detalleRenovacion, porteroRenovador);
 
@@ -210,8 +229,7 @@ app.post('/api/reservas/:id/renovar', async (req, res) => {
     }
 });
 
-// ------------------- RUTAS DE ENTREGAS DE CAJA -------------------
-
+// ENTREGAS DE CAJA Y LOGS
 app.get('/api/cierres-caja', async (req, res) => {
     try {
         const { data, error } = await supabase.from('cierres_caja').select('*').order('id', { ascending: false });
@@ -231,11 +249,10 @@ app.post('/api/cierres-caja', async (req, res) => {
 
         if (error) throw error;
 
-        const detalleCaja = `💰 ENTREGA DE DINERO FÍSICO DE CAJA:\n` +
-            `• Entregó (Portero): ${portero}\n` +
-            `• Recibió (Dueño): ${dueno}\n` +
-            `• Monto: $${Number(monto).toLocaleString('es-CL')}\n` +
-            `• Obs: ${observaciones || 'Sin observaciones'}`;
+        const detalleCaja = `💰 ENTREGA DE DINERO FÍSICO:\n` +
+            `• Entrega: ${portero} ➔ Recibe (Dueño): ${dueno}\n` +
+            `• Monto Entregado: $${Number(monto).toLocaleString('es-CL')}\n` +
+            `• Nota: ${observaciones || 'Sin observaciones'}`;
 
         await registrarLog('ENTREGA DE CAJA', detalleCaja, portero);
 
@@ -244,8 +261,6 @@ app.post('/api/cierres-caja', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
-// ------------------- RUTAS DE LOGS -------------------
 
 app.get('/api/logs', async (req, res) => {
     try {
