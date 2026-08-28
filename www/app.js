@@ -62,14 +62,13 @@ function configurarNavegacion() {
     document.getElementById("btnRefreshLogs")?.addEventListener("click", () => cargarLogs());
 }
 
-// OBTENER RESERVAS (PRINCIPAL)
+// OBTENER RESERVAS
 async function cargarReservas(silencioso = false) {
     try {
         const res = await fetch(API_URL);
         if (!res.ok) throw new Error("Error en el servidor");
         const data = await res.json();
         
-        // Garantizar que la data sea un arreglo valido
         reservasData = Array.isArray(data) ? data : [];
         renderizarReservas();
         actualizarEstadisticas();
@@ -202,7 +201,7 @@ async function guardarReserva(e) {
     }
 
     const payload = {
-        usuario: document.getElementById("usuarioForm")?.value || "Génesis",
+        usuario: document.getElementById("usuarioForm")?.value || "Maxi",
         titular: document.getElementById("nombre")?.value || "",
         rut: document.getElementById("rut")?.value || "",
         patente: document.getElementById("patente")?.value || "",
@@ -242,7 +241,7 @@ async function guardarReserva(e) {
     }
 }
 
-// RENDERIZAR RESERVAS EN PANTALLA
+// RENDERIZAR RESERVAS MOSTRANDO PORTERO RESPONSABLE
 function renderizarReservas() {
     const contenedor = document.getElementById("listaReservas");
     if (!contenedor) return;
@@ -278,7 +277,8 @@ function renderizarReservas() {
                 <div class="card-header">
                     <div>
                         <div class="guest-name">${r.titular}</div>
-                        <div class="guest-subtext">RUT: ${r.rut} | Patente: <b>${r.patente || 'N/A'}</b></div>
+                        <div class="guest-subtext">RUT: ${r.rut} | Patente: <b>${r.patente || 'Sin Vehículo'}</b></div>
+                        <div class="guest-subtext" style="color: #00f2fe; margin-top: 3px;">👮 Ingresado por: <b>${r.usuario || 'Portería'}</b></div>
                     </div>
                     <span class="badge ${esCamping ? 'badge-camping' : 'badge-picnic'}">${r.tipo}</span>
                 </div>
@@ -336,7 +336,7 @@ function abrirEditarReserva(id) {
 async function eliminarReserva(id) {
     if (confirm("¿Eliminar este registro?")) {
         try {
-            const usuario = prompt("Introduce tu nombre (Génesis / Maxi):", "Génesis") || "Staff";
+            const usuario = prompt("Introduce tu nombre para la auditoría (Maxi / Génesis):", "Maxi") || "Staff";
             await fetch(`${API_URL}/${id}?usuario=${encodeURIComponent(usuario)}`, { method: 'DELETE' });
             await cargarReservas();
         } catch (err) {
@@ -347,10 +347,11 @@ async function eliminarReserva(id) {
 
 async function renovarDia(id) {
     try {
+        const usuario = prompt("Introduce tu nombre para renovar (Maxi / Génesis):", "Maxi") || "Staff";
         await fetch(`${API_URL}/${id}/renovar`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ diasExtra: 1 })
+            body: JSON.stringify({ diasExtra: 1, usuario })
         });
         await cargarReservas();
     } catch (err) {
@@ -358,25 +359,26 @@ async function renovarDia(id) {
     }
 }
 
-// LOGS (PROTEGIDO CONTRA ERRORES DE TABLA)
+// LOGS DETALLADOS CON AUDITORÍA "ANTES VS DESPUÉS"
 async function cargarLogs() {
     try {
         const res = await fetch(LOGS_URL);
-        if (!res.ok) return; // Omisión silenciosa si falla o no existe la tabla
+        if (!res.ok) return;
         const logs = await res.json();
         const contenedor = document.getElementById("contenedorLogs");
         if (!contenedor || !Array.isArray(logs)) return;
 
         contenedor.innerHTML = "";
         logs.forEach(log => {
+            const esAlerta = log.accion.includes('ELIMINAD') || log.accion.includes('EDICIÓ') || log.accion.includes('ELIMINACIÓ');
             contenedor.innerHTML += `
-                <div class="log-card">
-                    <div class="log-header">
+                <div class="log-card" style="border-left: 4px solid ${esAlerta ? '#ff1744' : '#00f2fe'}; margin-bottom: 10px; padding: 12px; background: rgba(15, 23, 42, 0.6); border-radius: 12px;">
+                    <div class="log-header" style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 800; color: ${esAlerta ? '#ff5252' : '#00f2fe'};">
                         <span>${log.accion || 'ACCION'}</span>
                         <span>👤 ${log.usuario || 'Staff'}</span>
                     </div>
-                    <div class="log-body">${log.detalle || ''}</div>
-                    <div class="log-date">${formatearFecha(log.fecha)}</div>
+                    <div class="log-body" style="white-space: pre-line; font-family: monospace; font-size: 11px; margin-top: 6px; color: #f1f5f9; line-height: 1.4;">${log.detalle || ''}</div>
+                    <div class="log-date" style="font-size: 10px; color: #64748b; margin-top: 6px; text-align: right;">${formatearFecha(log.fecha)}</div>
                 </div>
             `;
         });
@@ -385,7 +387,7 @@ async function cargarLogs() {
     }
 }
 
-// ENTREGAS DE CAJA (PROTEGIDO CONTRA ERRORES DE TABLA)
+// ENTREGAS DE CAJA Y EXPORTACIÓN
 function configurarCajaYPDF() {
     const modalCaja = document.getElementById("modalCaja");
     
@@ -399,7 +401,7 @@ function configurarCajaYPDF() {
 
     document.getElementById("formCierreCaja")?.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const portero = document.getElementById("cajaPortero")?.value || "Génesis";
+        const portero = document.getElementById("cajaPortero")?.value || "Maxi";
         const dueno = document.getElementById("cajaDueno")?.value || "Olga";
         const monto = document.getElementById("cajaMonto")?.value || 0;
         const observaciones = document.getElementById("cajaObs")?.value || "";
@@ -411,7 +413,7 @@ function configurarCajaYPDF() {
                 body: JSON.stringify({ portero, dueno, monto, observaciones })
             });
             
-            if (!res.ok) throw new Error("Asegúrate de haber creado la tabla 'cierres_caja' en Supabase.");
+            if (!res.ok) throw new Error("Asegúrate de haber desplegado la versión del backend en Vercel.");
 
             modalCaja?.classList.add("hidden");
             document.getElementById("formCierreCaja")?.reset();
@@ -428,7 +430,7 @@ function configurarCajaYPDF() {
 async function cargarCierresCaja() {
     try {
         const res = await fetch(CIERRES_URL);
-        if (!res.ok) return; // Omisión silenciosa si la tabla no existe
+        if (!res.ok) return;
         const cierres = await res.json();
         const contenedor = document.getElementById("historialCierres");
         if (!contenedor || !Array.isArray(cierres)) return;
@@ -447,37 +449,58 @@ async function cargarCierresCaja() {
     }
 }
 
-// EXPORTAR PDF
-function exportarPDF() {
-    if (!window.jspdf) {
-        alert("Cargando módulo PDF... reintenta en un momento.");
-        return;
+// GUARDADO DIRECTO NATIVO DE PDF
+async function exportarPDF() {
+    try {
+        if (!window.jspdf) {
+            alert("El módulo PDF se está inicializando. Reintenta en 3 segundos.");
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        doc.setFontSize(16);
+        doc.text("Camping Los Maitenes - Reporte de Arqueo", 14, 20);
+        doc.setFontSize(10);
+        doc.text(`Fecha de emisión: ${new Date().toLocaleString("es-CL")}`, 14, 28);
+
+        const tablaReservas = (Array.isArray(reservasData) ? reservasData : []).map(r => [
+            r.titular || '',
+            r.tipo || '',
+            r.mesa_sitio || '',
+            r.metodo_pago || '',
+            `$${Number(r.monto_total || 0).toLocaleString("es-CL")}`
+        ]);
+
+        if (typeof doc.autoTable === 'function') {
+            doc.autoTable({
+                startY: 35,
+                head: [['Titular', 'Servicio', 'Ubicación', 'Método Pago', 'Monto']],
+                body: tablaReservas,
+            });
+        }
+
+        const fileName = `Arqueo_LosMaitenes_${new Date().toISOString().slice(0, 10)}.pdf`;
+        const pdfBase64 = doc.output('datauristring').split(',')[1];
+
+        const Filesystem = window.Capacitor?.Plugins?.Filesystem;
+
+        if (Filesystem) {
+            await Filesystem.writeFile({
+                path: fileName,
+                data: pdfBase64,
+                directory: 'DOCUMENTS',
+                recursive: true
+            });
+            alert(`✅ PDF descargado exitosamente en tu teléfono:\n${fileName}`);
+        } else {
+            doc.save(fileName);
+        }
+
+    } catch (error) {
+        alert("Error al descargar el PDF nativo: " + error.message);
     }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    doc.setFontSize(16);
-    doc.text("Camping Los Maitenes - Reporte de Arqueo", 14, 20);
-    doc.setFontSize(10);
-    doc.text(`Fecha de emisión: ${new Date().toLocaleString("es-CL")}`, 14, 28);
-
-    const tablaReservas = (Array.isArray(reservasData) ? reservasData : []).map(r => [
-        r.titular || '',
-        r.tipo || '',
-        r.mesa_sitio || '',
-        r.metodo_pago || '',
-        `$${Number(r.monto_total || 0).toLocaleString("es-CL")}`
-    ]);
-
-    if (typeof doc.autoTable === 'function') {
-        doc.autoTable({
-            startY: 35,
-            head: [['Titular', 'Servicio', 'Ubicación', 'Método Pago', 'Monto']],
-            body: tablaReservas,
-        });
-    }
-
-    doc.save(`Arqueo_LosMaitenes_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 function formatearFecha(isoString) {
